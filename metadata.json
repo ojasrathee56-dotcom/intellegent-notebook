@@ -1,0 +1,5 @@
+{
+  "name": "Intelligent Notebook",
+  "description": "An AI-powered application for organizing your research. Create notebooks, add text and URL sources, and use the integrated AI chat to ask questions, summarize content, and generate insights across all your documents.",
+  "requestFramePermissions": []
+}

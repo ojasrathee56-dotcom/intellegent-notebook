@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Intelligent Notebook</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              'brand-bg': '#f0f4f9',
+              'brand-surface': '#ffffff',
+              'brand-primary': '#1967d2',
+              'brand-primary-hover': '#175ab4',
+              'brand-text-primary': '#1f1f1f',
+              'brand-text-secondary': '#5f6368',
+              'brand-border': '#dadce0',
+              // Dark mode colors
+              'dark-bg': '#202124',
+              'dark-surface': '#303134',
+              'dark-primary': '#8ab4f8',
+              'dark-primary-hover': '#a1c2fa',
+              'dark-text-primary': '#e8eaed',
+              'dark-text-secondary': '#969ba1',
+              'dark-border': '#5f6368',
+            },
+            fontFamily: {
+              sans: ['Google Sans', 'Roboto', 'sans-serif'],
+            },
+            keyframes: {
+              pulse: {
+                '0%, 100%': { opacity: 1 },
+                '50%': { opacity: 0.5 },
+              }
+            }
+          },
+        },
+      }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Library for parsing .xlsx files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Library for unzipping .pptx and .docx files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- Library for parsing .docx files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.19.0"
+  }
+}
+</script>
+</head>
+  <body class="bg-brand-bg dark:bg-dark-bg font-sans">
+    <div id="root"></div>
+  </body>
+</html>
