@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import type { Notebook, ChatMessage, SourceType, SavedItem, Flashcard, MindMapNode, QuizQuestion, FAQItem, TimelineEvent, Debate } from '../types';
 import { ContentType } from '../types';
 import { GeneratedContent, FlashcardViewerModal, MindMapViewerModal } from './GeneratedContent';
-import { SendIcon, SparklesIcon, SummaryIcon, QuizIcon, FlashcardIcon, FAQIcon, TimelineIcon, PodcastIcon, BrainstormIcon, CritiqueIcon, MindMapIcon, DebateIcon, BookIcon, LinkIcon, UploadIcon, TrashIcon } from './Icons';
+import { SendIcon, SparklesIcon, SummaryIcon, QuizIcon, FlashcardIcon, FAQIcon, TimelineIcon, PodcastIcon, BrainstormIcon, CritiqueIcon, MindMapIcon, DebateIcon, BookIcon, LinkIcon, UploadIcon, TrashIcon, MenuIcon } from './Icons';
 import { parseFile } from '../services/fileParserService';
 import * as geminiService from '../services/geminiService';
 
@@ -16,6 +16,7 @@ interface ChatViewProps {
     isLoading: boolean;
     onSaveItem: (notebookId: string, itemData: { type: ContentType; contentData: any; title: string; }) => void;
     onDeleteSavedItem: (notebookId: string, itemId: string) => void;
+    onToggleSidebar: () => void;
 }
 
 const AddSourceForm: React.FC<{ notebookId: string; onAddSource: ChatViewProps['onAddSource'] }> = ({ notebookId, onAddSource }) => {
@@ -213,7 +214,7 @@ const SavedItemsList: React.FC<{ items: SavedItem[]; onDeleteItem: (itemId: stri
 };
 
 
-export const ChatView: React.FC<ChatViewProps> = ({ notebook, chatHistory, onSendMessage, onAddSource, isLoading, onSaveItem, onDeleteSavedItem }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ notebook, chatHistory, onSendMessage, onAddSource, isLoading, onSaveItem, onDeleteSavedItem, onToggleSidebar }) => {
     const [input, setInput] = useState('');
     const [showActions, setShowActions] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -258,10 +259,17 @@ export const ChatView: React.FC<ChatViewProps> = ({ notebook, chatHistory, onSen
 
     return (
         <div className="flex-1 flex flex-col h-full">
-             <header className="p-4 border-b border-brand-border dark:border-dark-border">
-                <h2 className="text-xl font-semibold">{notebook.title}</h2>
+             <header className="p-4 border-b border-brand-border dark:border-dark-border flex items-center gap-2">
+                <button
+                    onClick={onToggleSidebar}
+                    className="p-2 -ml-2 rounded-full md:hidden hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    aria-label="Open sidebar"
+                >
+                    <MenuIcon className="w-6 h-6" />
+                </button>
+                <h2 className="text-xl font-semibold truncate">{notebook.title}</h2>
             </header>
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
                 <div className="space-y-4">
                     <AddSourceForm notebookId={notebook.id} onAddSource={onAddSource} />
                     {notebook.sources.length > 0 && (
@@ -293,7 +301,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ notebook, chatHistory, onSen
                      <div key={message.id} className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : ''}`}>
                         {message.role === 'model' && <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center flex-shrink-0"><SparklesIcon className="w-5 h-5 text-brand-primary dark:text-dark-primary"/></div>}
                         <div className={`max-w-2xl w-full ${message.role === 'user' ? 'text-right' : ''}`}>
-                             <div className={`inline-block p-4 rounded-2xl ${message.role === 'user' ? 'bg-brand-primary dark:bg-dark-primary text-white dark:text-gray-900 rounded-br-none' : 'bg-gray-100 dark:bg-gray-700 rounded-bl-none'}`}>
+                             <div className={`inline-block p-3 md:p-4 rounded-2xl ${message.role === 'user' ? 'bg-brand-primary dark:bg-dark-primary text-white dark:text-gray-900 rounded-br-none' : 'bg-gray-100 dark:bg-gray-700 rounded-bl-none'}`}>
                                 <GeneratedContent 
                                     message={message} 
                                     onSaveItem={(type, contentData) => {
@@ -331,11 +339,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ notebook, chatHistory, onSen
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) handleSubmit(e); }}
                         placeholder={hasSources ? "Ask a question about your notebook..." : "Add a source to start chatting"}
-                        className="w-full p-3 pr-76 rounded-lg border border-brand-border dark:border-dark-border bg-brand-bg dark:bg-dark-bg focus:ring-2 focus:ring-brand-primary dark:focus:ring-dark-primary focus:outline-none resize-none"
+                        className="w-full p-3 pr-[280px] lg:pr-80 rounded-lg border border-brand-border dark:border-dark-border bg-brand-bg dark:bg-dark-bg focus:ring-2 focus:ring-brand-primary dark:focus:ring-dark-primary focus:outline-none resize-none"
                         rows={1}
                         disabled={!hasSources || isLoading}
                     />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0">
                          <button type="button" onClick={() => handleSpecialAction('flashcards')} disabled={!hasSources || isLoading} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50" aria-label="Generate flashcards">
                             <FlashcardIcon className="w-5 h-5 text-brand-text-secondary dark:text-dark-text-secondary"/>
                          </button>

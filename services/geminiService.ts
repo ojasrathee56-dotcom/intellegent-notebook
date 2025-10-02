@@ -1,296 +1,235 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import type { Flashcard, QuizQuestion, FAQItem, TimelineEvent, MindMapNode, Debate, Source } from '../types';
-import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.min.mjs';
+import type { Source, QuizQuestion, Flashcard, FAQItem, TimelineEvent, MindMapNode, Debate } from '../types';
 
-// @ts-ignore
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.worker.min.mjs`;
-
-if (!process.env.API_KEY) {
-    throw new Error("API_KEY environment variable not set");
-}
-
+// Fix: Correctly initialize GoogleGenAI with named apiKey parameter.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 const model = 'gemini-2.5-flash';
 
-// Schemas for structured content
-const flashcardSchema = {
-    type: Type.ARRAY,
-    items: {
-      type: Type.OBJECT,
-      properties: {
-        term: { type: Type.STRING, description: 'The key term or concept.' },
-        definition: { type: Type.STRING, description: 'A concise definition or explanation of the term.' },
-      },
-      required: ["term", "definition"],
-    },
-};
-
-const quizSchema = {
-    type: Type.ARRAY,
-    items: {
-        type: Type.OBJECT,
-        properties: {
-            question: { type: Type.STRING, description: 'The quiz question.' },
-            options: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'An array of 4 possible answers.' },
-            correctAnswer: { type: Type.STRING, description: 'The correct answer from the options.' }
-        },
-        required: ["question", "options", "correctAnswer"],
+// Helper function to combine sources into a single context string
+const getSourceContext = (sources: Source[]): string => {
+    if (!sources || sources.length === 0) {
+        return "No sources provided.";
     }
+    // Combine sources into a single string for the model prompt
+    return sources.map(s => `Source Title: ${s.title}\nSource Content:\n${s.content}`).join('\n\n---\n\n');
 };
 
-const faqSchema = {
-    type: Type.ARRAY,
-    items: {
-        type: Type.OBJECT,
-        properties: {
-            question: { type: Type.STRING, description: 'A frequently asked question from the source material.' },
-            answer: { type: Type.STRING, description: 'A concise answer to the question, based on the source.' },
-        },
-        required: ["question", "answer"],
-    }
-};
-
-const timelineSchema = {
-    type: Type.ARRAY,
-    items: {
-        type: Type.OBJECT,
-        properties: {
-            date: { type: Type.STRING, description: 'The date or time period of the event (e.g., "1992", "Late 18th Century").' },
-            event: { type: Type.STRING, description: 'A concise title for the event.' },
-            description: { type: Type.STRING, description: 'A short description of the event, based on the source material.' },
-        },
-        required: ["date", "event", "description"],
-    }
-};
-
-// A schema for a mind map with a fixed depth to prevent infinite recursion errors.
-// This allows for a root topic with up to 5 nested levels of children.
-const mindMapNodeSchemaL5 = {
-    type: Type.OBJECT,
-    properties: {
-        topic: { type: Type.STRING, description: 'The topic for this node.' },
-    },
-    required: ['topic'],
-};
-
-const mindMapNodeSchemaL4 = {
-    type: Type.OBJECT,
-    properties: {
-        topic: { type: Type.STRING, description: 'The topic for this node.' },
-        children: { type: Type.ARRAY, items: mindMapNodeSchemaL5, description: 'Sub-topics.' },
-    },
-    required: ['topic'],
-};
-
-const mindMapNodeSchemaL3 = {
-    type: Type.OBJECT,
-    properties: {
-        topic: { type: Type.STRING, description: 'The topic for this node.' },
-        children: { type: Type.ARRAY, items: mindMapNodeSchemaL4, description: 'Sub-topics.' },
-    },
-    required: ['topic'],
-};
-
-const mindMapNodeSchemaL2 = {
-    type: Type.OBJECT,
-    properties: {
-        topic: { type: Type.STRING, description: 'The topic for this node.' },
-        children: { type: Type.ARRAY, items: mindMapNodeSchemaL3, description: 'Sub-topics.' },
-    },
-    required: ['topic'],
-};
-
-const mindMapNodeSchemaL1 = {
-    type: Type.OBJECT,
-    properties: {
-        topic: { type: Type.STRING, description: 'The topic for this node.' },
-        children: { type: Type.ARRAY, items: mindMapNodeSchemaL2, description: 'Sub-topics.' },
-    },
-    required: ['topic'],
-};
-
-const mindMapSchema = {
-    type: Type.OBJECT,
-    properties: {
-        topic: { 
-            type: Type.STRING, 
-            description: 'The central idea or concept for the mind map.' 
-        },
-        children: {
-            type: Type.ARRAY,
-            description: 'An array of child nodes, representing sub-topics.',
-            items: mindMapNodeSchemaL1,
-        },
-    },
-    required: ['topic'],
-};
-
-const debateSchema = {
-    type: Type.OBJECT,
-    properties: {
-        viewpointA: {
-            type: Type.OBJECT,
-            properties: {
-                title: { type: Type.STRING, description: "The title for the first viewpoint (e.g., 'For the Proposal')." },
-                arguments: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of arguments supporting this viewpoint." }
-            },
-            required: ["title", "arguments"]
-        },
-        viewpointB: {
-            type: Type.OBJECT,
-            properties: {
-                title: { type: Type.STRING, description: "The title for the opposing viewpoint (e.g., 'Against the Proposal')." },
-                arguments: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of arguments supporting this viewpoint." }
-            },
-            required: ["title", "arguments"]
-        }
-    },
-    required: ["viewpointA", "viewpointB"]
-};
-
-
-// Generic function to generate prompts from multiple sources
-const generatePrompt = (sources: Source[], task: string): string => {
-    const sourceMaterial = sources.map((source, index) => {
-        return `
---- SOURCE ${index + 1}: ${source.title} (${source.type.toUpperCase()}) ---
-${source.content}
------------------------------------
-`
-    }).join('\n\n');
-
-    return `Based on the following source materials, ${task}.
-
-${sourceMaterial}
-`;
-};
-
-// Function to handle JSON parsing with error handling
-async function generateJsonContent<T>(prompt: string, schema: object): Promise<T> {
+/**
+ * Generic handler for generating content with JSON output.
+ */
+async function generateJsonContent<T>(prompt: string, schema: any): Promise<T> {
     const response = await ai.models.generateContent({
         model,
         contents: prompt,
         config: {
             responseMimeType: "application/json",
             responseSchema: schema,
-        },
+        }
     });
 
     try {
+        // Fix: Use response.text to get the generated content.
         const jsonText = response.text.trim();
-        if (!jsonText) {
-            throw new Error("Received an empty response from the AI.");
-        }
-        return JSON.parse(jsonText) as T;
-    } catch (error) {
-        console.error("Failed to parse JSON response:", error, "\nRaw text:", response.text);
-        throw new Error("Could not generate valid structured content.");
+        return JSON.parse(jsonText);
+    } catch (e) {
+        console.error("Failed to parse JSON response:", e, "\nRaw response:", response.text);
+        throw new Error("The model returned an invalid format. Please try again.");
     }
 }
 
-// Function to handle text generation
+/**
+ * Generic handler for generating text content.
+ */
 async function generateTextContent(prompt: string): Promise<string> {
     const response = await ai.models.generateContent({
         model,
         contents: prompt,
     });
+    // Fix: Use response.text to get the generated content.
     return response.text;
 }
 
-export const askAboutSource = (sources: Source[], question: string) => 
-    generateTextContent(generatePrompt(sources, `answer the following question: "${question}"`));
+export async function askAboutSource(sources: Source[], question: string): Promise<string> {
+    const sourceContext = getSourceContext(sources);
+    const prompt = `Based on the following sources, please answer the question.\n\nSources:\n${sourceContext}\n\nQuestion: ${question}`;
+    return generateTextContent(prompt);
+}
 
-export const generateFlashcards = (sources: Source[]): Promise<Omit<Flashcard, 'id'>[]> => 
-    generateJsonContent<Omit<Flashcard, 'id'>[]>(generatePrompt(sources, 'generate a list of flashcards with terms and definitions covering the main topics.'), flashcardSchema);
+export async function generateSummary(sources: Source[]): Promise<string> {
+    const sourceContext = getSourceContext(sources);
+    const prompt = `Please provide a concise summary of the key points from the following sources:\n\n${sourceContext}`;
+    return generateTextContent(prompt);
+}
 
-export const generateQuiz = (sources: Source[]): Promise<QuizQuestion[]> => 
-    generateJsonContent<QuizQuestion[]>(generatePrompt(sources, 'generate a multiple-choice quiz with 4 options per question to test understanding of the key concepts.'), quizSchema);
+export async function generateQuiz(sources: Source[]): Promise<QuizQuestion[]> {
+    const sourceContext = getSourceContext(sources);
+    const prompt = `Based on the provided sources, create a multiple-choice quiz with 5 questions. For each question, provide 4 options and indicate the correct answer.\n\nSources:\n${sourceContext}`;
+    
+    const schema = {
+        type: Type.ARRAY,
+        items: {
+            type: Type.OBJECT,
+            properties: {
+                question: { type: Type.STRING, description: "The quiz question." },
+                options: { 
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                    description: "An array of 4 possible answers."
+                },
+                correctAnswer: { type: Type.STRING, description: "The correct answer from the options." }
+            },
+            required: ['question', 'options', 'correctAnswer']
+        }
+    };
+    return generateJsonContent<QuizQuestion[]>(prompt, schema);
+}
 
-export const generatePodcastScript = (sources: Source[]) => 
-    generateTextContent(generatePrompt(sources, 'write a short, engaging podcast script that summarizes and discusses the main ideas. The script should be conversational and easy to follow.'));
+export async function generateFlashcards(sources: Source[]): Promise<Flashcard[]> {
+    const sourceContext = getSourceContext(sources);
+    const prompt = `Generate a set of 10 flashcards from the provided sources. Each flashcard should have a 'term' and a 'definition'.\n\nSources:\n${sourceContext}`;
+    
+    const schema = {
+        type: Type.ARRAY,
+        items: {
+            type: Type.OBJECT,
+            properties: {
+                term: { type: Type.STRING, description: "The key term for the flashcard." },
+                definition: { type: Type.STRING, description: "The definition of the term." }
+            },
+            required: ['term', 'definition']
+        }
+    };
+    return generateJsonContent<Flashcard[]>(prompt, schema);
+}
 
-export const generateSummary = (sources: Source[]) =>
-    generateTextContent(generatePrompt(sources, 'provide a concise summary.'));
+export async function generateFAQ(sources: Source[]): Promise<FAQItem[]> {
+    const sourceContext = getSourceContext(sources);
+    const prompt = `Generate a list of 5 frequently asked questions (FAQs) with their answers based on the provided sources.\n\nSources:\n${sourceContext}`;
 
-export const generateFAQ = (sources: Source[]): Promise<FAQItem[]> =>
-    generateJsonContent<FAQItem[]>(generatePrompt(sources, 'generate a list of frequently asked questions (FAQs) with answers.'), faqSchema);
+    const schema = {
+        type: Type.ARRAY,
+        items: {
+            type: Type.OBJECT,
+            properties: {
+                question: { type: Type.STRING },
+                answer: { type: Type.STRING }
+            },
+            required: ['question', 'answer']
+        }
+    };
+    return generateJsonContent<FAQItem[]>(prompt, schema);
+}
 
-export const generateTimeline = (sources: Source[]): Promise<TimelineEvent[]> =>
-    generateJsonContent<TimelineEvent[]>(generatePrompt(sources, 'generate a timeline of key events. Only include events explicitly mentioned in the text.'), timelineSchema);
+export async function generateTimeline(sources: Source[]): Promise<TimelineEvent[]> {
+    const sourceContext = getSourceContext(sources);
+    const prompt = `Create a timeline of key events based on the provided sources. Each event should have a date, a short event title, and a brief description. If exact dates are not available, use relative terms (e.g., 'Early 20th Century').\n\nSources:\n${sourceContext}`;
 
-export const generateIdeas = (sources: Source[]) =>
-    generateTextContent(generatePrompt(sources, 'generate a list of brainstorm ideas, new concepts, or interesting questions based on the material.'));
+    const schema = {
+        type: Type.ARRAY,
+        items: {
+            type: Type.OBJECT,
+            properties: {
+                date: { type: Type.STRING },
+                event: { type: Type.STRING },
+                description: { type: Type.STRING }
+            },
+            required: ['date', 'event', 'description']
+        }
+    };
+    return generateJsonContent<TimelineEvent[]>(prompt, schema);
+}
 
-export const generateCritique = (sources: Source[]) =>
-    generateTextContent(generatePrompt(sources, 'provide a constructive critique of the source material. Discuss its strengths, weaknesses, and potential biases.'));
+export async function generatePodcastScript(sources: Source[]): Promise<string> {
+    const sourceContext = getSourceContext(sources);
+    const prompt = `Write a short podcast script (around 300 words) discussing the main themes of the following sources. The script should be engaging and conversational. Include intro and outro music cues.\n\nSources:\n${sourceContext}`;
+    return generateTextContent(prompt);
+}
 
-export const generateMindMap = (sources: Source[]): Promise<MindMapNode> =>
-    generateJsonContent<MindMapNode>(generatePrompt(sources, 'generate a deeply hierarchical mind map of the key concepts. The mind map should have a central topic and multiple levels of nested children topics to represent the information hierarchy.'), mindMapSchema);
+export async function generateIdeas(sources: Source[]): Promise<string> {
+    const sourceContext = getSourceContext(sources);
+    const prompt = `Brainstorm a list of 5-7 interesting ideas, concepts, or project proposals based on the provided sources. Format them as a bulleted list.\n\nSources:\n${sourceContext}`;
+    return generateTextContent(prompt);
+}
 
-export const generateDebate = (sources: Source[]): Promise<Debate> =>
-    generateJsonContent<Debate>(generatePrompt(sources, 'generate two opposing viewpoints based on the source material. For each viewpoint, provide a title and a list of supporting arguments.'), debateSchema);
+export async function generateCritique(sources: Source[]): Promise<string> {
+    const sourceContext = getSourceContext(sources);
+    const prompt = `Provide a balanced critique of the provided sources. Discuss their strengths, weaknesses, potential biases, and any gaps in the information presented.\n\nSources:\n${sourceContext}`;
+    return generateTextContent(prompt);
+}
 
+export async function generateMindMap(sources: Source[]): Promise<MindMapNode> {
+    const sourceContext = getSourceContext(sources);
+    const prompt = `Generate a mind map structure from the provided sources. The mind map should have a central topic and several child nodes, which can also have their own children. Keep it to a maximum of 3 levels deep.\n\nSources:\n${sourceContext}`;
+
+    // Define the schema up to 3 levels deep as requested by the prompt.
+    const mindMapNodeSchema: any = {
+        type: Type.OBJECT,
+        properties: {
+            topic: { type: Type.STRING },
+            children: {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        topic: { type: Type.STRING },
+                        children: {
+                           type: Type.ARRAY,
+                           items: {
+                               type: Type.OBJECT,
+                               properties: {
+                                   topic: { type: Type.STRING }
+                               }
+                           }
+                        }
+                    }
+                }
+            }
+        },
+        required: ['topic']
+    };
+    
+    return generateJsonContent<MindMapNode>(prompt, mindMapNodeSchema);
+}
+
+export async function generateDebate(sources: Source[]): Promise<Debate> {
+    const sourceContext = getSourceContext(sources);
+    const prompt = `Based on the provided sources, construct a debate with two opposing viewpoints. For each viewpoint, provide a title and a list of 3-4 supporting arguments.\n\nSources:\n${sourceContext}`;
+
+    const viewpointSchema = {
+        type: Type.OBJECT,
+        properties: {
+            title: { type: Type.STRING },
+            arguments: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING }
+            }
+        },
+        required: ['title', 'arguments']
+    };
+
+    const schema = {
+        type: Type.OBJECT,
+        properties: {
+            viewpointA: viewpointSchema,
+            viewpointB: viewpointSchema
+        },
+        required: ['viewpointA', 'viewpointB']
+    };
+
+    return generateJsonContent<Debate>(prompt, schema);
+}
 
 export async function fetchUrlContent(url: string): Promise<string> {
-    // Using a CORS proxy to bypass browser restrictions
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-
-    try {
-        const response = await fetch(proxyUrl);
-        if (!response.ok) {
-            throw new Error(`Failed to fetch from proxy with status: ${response.status}. The requested URL might be down or blocking the proxy.`);
-        }
-
-        const contentType = response.headers.get('content-type') || '';
-
-        const parseHtml = (html: string): string => {
-            const doc = new DOMParser().parseFromString(html, 'text/html');
-            // Remove common non-content elements
-            doc.querySelectorAll('script, style, nav, header, footer, aside, form, button, [role="navigation"], [role="banner"], [role="contentinfo"], [role="complementary"]').forEach(el => el.remove());
-            let text = doc.body?.textContent || "";
-            // Clean up whitespace
-            text = text.replace(/(\r\n|\n|\r)/gm, " ").replace(/\s\s+/g, ' ').trim();
-            return text;
-        };
-
-        if (contentType.includes('application/pdf')) {
-            const arrayBuffer = await response.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-            let textContent = '';
-            for (let i = 1; i <= pdf.numPages; i++) {
-                const page = await pdf.getPage(i);
-                const text = await page.getTextContent();
-                textContent += text.items.map((s: any) => s.str).join(' ') + '\n\n';
-            }
-            return textContent.trim();
-        }
-
-        if (contentType.includes('text/html')) {
-            const html = await response.text();
-            return parseHtml(html);
-        }
-
-        if (contentType.startsWith('text/')) {
-            return await response.text();
-        }
-
-        // Fallback for unknown or missing content types
-        const bodyText = await response.text();
-        // A simple check to see if the content is likely HTML
-        if (bodyText.trim().toLowerCase().startsWith('<!doctype html') || bodyText.trim().toLowerCase().startsWith('<html')) {
-            return parseHtml(bodyText);
-        }
-        
-        // If it's not clearly HTML, and not empty, return the raw text
-        if (bodyText) {
-            return bodyText;
-        }
-
-        throw new Error(`Unsupported or empty content from URL. Content-Type: ${contentType || 'Not specified'}`);
-        
-    } catch (error: any) {
-        console.error("Error fetching URL content:", error);
-        // Updated error message to be more user-friendly
-        throw new Error(`Could not fetch content from the URL. This might be due to a network issue, an invalid URL, or the content being blocked. Details: ${error.message}`);
-    }
+    const prompt = `Please summarize the main content from the following URL and return it as plain text. If you cannot access the URL, please state that clearly. URL: ${url}`;
+    
+    // Use Google Search grounding to allow the model to access web content.
+    const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+            tools: [{ googleSearch: {} }],
+        },
+    });
+    
+    return response.text;
 }

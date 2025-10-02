@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import type { ChatMessage, QuizQuestion, Flashcard, FAQItem, TimelineEvent, MindMapNode, Debate } from '../types';
 import { ContentType } from '../types';
 import { ChevronDownIcon, FlashcardIcon, ChevronLeftIcon, ChevronRightIcon, XMarkIcon, PlayIcon, PauseIcon, StopIcon, MindMapIcon, DownloadIcon, FolderArrowDownIcon } from './Icons';
-import * as geminiService from '../services/geminiService';
 
 interface GeneratedContentProps {
     message: ChatMessage;
@@ -60,15 +59,29 @@ const ContentActions: React.FC<{ children: React.ReactNode }> = ({ children }) =
     </div>
 );
 
-const ActionButton: React.FC<{ onClick: () => void; children: React.ReactNode; 'aria-label': string }> = (props) => (
-    <button
-        onClick={props.onClick}
-        aria-label={props['aria-label']}
-        className="inline-flex items-center gap-2 px-3 py-1.5 text-xs rounded-full bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 transition-colors font-semibold"
-    >
-        {props.children}
-    </button>
-);
+const ActionButton: React.FC<{ onClick?: () => void; href?: string; download?: string | boolean; children: React.ReactNode; 'aria-label': string }> = (props) => {
+    if (props.href) {
+         return (
+            <a
+                href={props.href}
+                download={props.download}
+                aria-label={props['aria-label']}
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs rounded-full bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 transition-colors font-semibold"
+            >
+                {props.children}
+            </a>
+        );
+    }
+    return (
+        <button
+            onClick={props.onClick}
+            aria-label={props['aria-label']}
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-xs rounded-full bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 transition-colors font-semibold"
+        >
+            {props.children}
+        </button>
+    );
+}
 
 
 export const FlashcardViewerModal: React.FC<{ flashcards: Flashcard[]; onClose: () => void }> = ({ flashcards, onClose }) => {
@@ -430,7 +443,6 @@ const TextBlockComponent: React.FC<{ content: string }> = ({ content }) => {
      return <div className="bg-white dark:bg-dark-surface p-4 rounded-lg shadow-sm text-sm whitespace-pre-wrap">{content}</div>
 }
 
-
 export const GeneratedContent: React.FC<GeneratedContentProps> = ({ message, onSaveItem }) => {
     const renderContent = () => {
         switch(message.contentType) {
@@ -494,7 +506,7 @@ export const GeneratedContent: React.FC<GeneratedContentProps> = ({ message, onS
                         </ContentActions>
                     </>
                 );
-
+            
             case ContentType.SUMMARY:
             case ContentType.IDEAS:
             case ContentType.CRITIQUE:

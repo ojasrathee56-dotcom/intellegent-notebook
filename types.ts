@@ -1,4 +1,21 @@
+// Fix: Removed circular import of ContentType from './types'.
 export type SourceType = 'text' | 'url';
+
+// Fix: Moved ContentType enum to be defined before it is used.
+export enum ContentType {
+    TEXT = 'TEXT',
+    QUIZ = 'QUIZ',
+    FLASHCARDS = 'FLASHCARDS',
+    PODCAST = 'PODCAST',
+    ERROR = 'ERROR',
+    SUMMARY = 'SUMMARY',
+    FAQ = 'FAQ',
+    TIMELINE = 'TIMELINE',
+    IDEAS = 'IDEAS',
+    CRITIQUE = 'CRITIQUE',
+    MIND_MAP = 'MIND_MAP',
+    DEBATE = 'DEBATE',
+}
 
 export interface Source {
     id: string;
@@ -22,21 +39,6 @@ export interface Notebook {
     sources: Source[];
     createdAt: string;
     savedItems?: SavedItem[];
-}
-
-export enum ContentType {
-    TEXT = 'TEXT',
-    QUIZ = 'QUIZ',
-    FLASHCARDS = 'FLASHCARDS',
-    PODCAST = 'PODCAST',
-    ERROR = 'ERROR',
-    SUMMARY = 'SUMMARY',
-    FAQ = 'FAQ',
-    TIMELINE = 'TIMELINE',
-    IDEAS = 'IDEAS',
-    CRITIQUE = 'CRITIQUE',
-    MIND_MAP = 'MIND_MAP',
-    DEBATE = 'DEBATE',
 }
 
 export interface Flashcard {

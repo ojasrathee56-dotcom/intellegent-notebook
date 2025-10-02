@@ -14,6 +14,7 @@ const App: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [isCreatingNotebook, setIsCreatingNotebook] = useState(false);
     const [isDarkMode, setIsDarkMode] = useLocalStorage<boolean>('intelligent-notebook-darkMode', false);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     const activeNotebook = notebooks.find(n => n.id === activeNotebookId) || null;
     const activeChatHistory = activeNotebookId ? chatHistory[activeNotebookId] || [] : [];
@@ -167,17 +168,22 @@ const App: React.FC = () => {
     }
 
     return (
-        <div className="flex h-screen w-screen text-brand-text-primary dark:text-dark-text-primary">
+        <div className="relative flex h-screen w-screen overflow-hidden text-brand-text-primary dark:text-dark-text-primary">
             <Sidebar
                 notebooks={notebooks}
                 activeNotebookId={activeNotebookId}
-                onSelectNotebook={setActiveNotebookId}
+                onSelectNotebook={(id) => {
+                    setActiveNotebookId(id);
+                    setIsSidebarOpen(false); // Close sidebar on selection
+                }}
                 onAddNotebook={() => setIsCreatingNotebook(true)}
                 onDeleteNotebook={handleDeleteNotebook}
                 isDarkMode={isDarkMode}
                 onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+                isOpen={isSidebarOpen}
+                onClose={() => setIsSidebarOpen(false)}
             />
-            <main className="flex-1 flex flex-col bg-brand-surface dark:bg-dark-surface">
+            <main className="flex-1 flex flex-col bg-brand-surface dark:bg-dark-surface transition-all duration-300">
                 {activeNotebook ? (
                     <ChatView
                         key={activeNotebook.id} // Re-mount component on notebook change
@@ -188,6 +194,7 @@ const App: React.FC = () => {
                         isLoading={isLoading}
                         onSaveItem={handleSaveItemToNotebook}
                         onDeleteSavedItem={handleDeleteSavedItem}
+                        onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
                     />
                 ) : (
                     <div className="flex-1 flex items-center justify-center text-brand-text-secondary dark:text-dark-text-secondary">
